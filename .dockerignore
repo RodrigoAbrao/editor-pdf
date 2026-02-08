@@ -1,0 +1,48 @@
+# flyctl launch added from .gitignore
+# Python
+**\.venv
+**\__pycache__
+**\*.py[cod]
+**\*.pyo
+**\*.pyd
+**\.pytest_cache
+**\.mypy_cache
+**\.ruff_cache
+
+# Env
+**\.env
+**\.env.*
+
+# Data / uploads
+**\data
+**\uploads
+
+# Logs
+**\*.log
+
+# Node / Frontend
+**\node_modules
+**\dist
+**\build
+**\.vite
+**\.next
+
+# Encore
+**\.encore
+
+# OS / Editor
+**\.DS_Store
+**\Thumbs.db
+**\.vscode
+**\encore.gen.go
+**\encore.gen.cue
+.encore
+encore.gen
+
+# flyctl launch added from .venv\.gitignore
+# Created by venv; see https://docs.python.org/3/library/venv.html
+.venv\**\*
+
+# flyctl launch added from frontend\.gitignore
+frontend\**\.vercel
+fly.toml
