@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 from pathlib import Path
 
 import fitz  # PyMuPDF
+
+log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
 
 from models import EditOperation, PageText, Rect, TextSpan
 
@@ -50,6 +54,14 @@ def save_upload(file_bytes: bytes) -> str:
     doc_id = hashlib.sha256(file_bytes).hexdigest()[:16]
     dest = UPLOADS_DIR / f"{doc_id}.pdf"
     dest.write_bytes(file_bytes)
+    # Validate PDF
+    try:
+        with fitz.open(dest):
+            pass
+    except Exception as exc:
+        if dest.exists():
+            dest.unlink(missing_ok=True)
+        raise ValueError("Invalid PDF file") from exc
     return doc_id
 
 
@@ -146,18 +158,78 @@ def extract_page_text(doc_id: str, page_num: int) -> PageText:
                         font=_clean_font_name(span.get("font", "")),
                         size=round(span.get("size", 11), 2),
                         color=_color_to_hex(span.get("color", 0)),
-                        rect=Rect(x0=bbox[0], y0=bbox[1], x1=bbox[2], y1=bbox[3]),
+                        rect=Rect(x0=bbox[0], y0=bbox[1],
+                                  x1=bbox[2], y1=bbox[3]),
                         flags=span.get("flags", 0),
                     )
                 )
     return PageText(page=page_num, width=rect.width, height=rect.height, spans=spans)
 
 
+# ── signature removal ────────────────────────────────────────────────────────
+
+def _remove_signatures(doc: fitz.Document) -> None:
+    """Remove all signature widgets and annotation signatures from the PDF.
+
+    This is necessary because signed PDFs may block modifications.
+    We strip signature fields so edits can be freely applied.
+    """
+    removed = 0
+    for page in doc:
+        # Remove signature widgets
+        widgets = page.widgets()
+        if widgets:
+            for widget in widgets:
+                try:
+                    if widget.field_type == fitz.PDF_WIDGET_TYPE_SIGNATURE:
+                        widget_rect = widget.rect
+                        page.delete_widget(widget)
+                        removed += 1
+                        log.info("  Removed signature widget at %s", widget_rect)
+                except Exception as exc:
+                    log.warning("  Failed to remove signature widget: %s", exc)
+
+        # Remove signature annotations
+        annots = page.annots()
+        if annots:
+            to_delete = []
+            for annot in annots:
+                try:
+                    if annot.type[0] == fitz.PDF_ANNOT_WIDGET:
+                        # Check if it's a signature field via info
+                        info = annot.info
+                        if info.get("title", "").lower().startswith("sig"):
+                            to_delete.append(annot)
+                except Exception:
+                    pass
+            for annot in to_delete:
+                try:
+                    page.delete_annot(annot)
+                    removed += 1
+                except Exception:
+                    pass
+
+    if removed:
+        log.info("  Removed %d signature(s) from PDF", removed)
+
+
 # ── overlay export ───────────────────────────────────────────────────────────
 
 def apply_edits(doc_id: str, edits: list[EditOperation]) -> bytes:
     """Apply overlay edits and return the resulting PDF bytes."""
+    log.info("apply_edits called with %d edits for doc %s", len(edits), doc_id)
+    for i, e in enumerate(edits):
+        log.info(
+            "  edit[%d]: page=%d rect=(%.1f,%.1f,%.1f,%.1f) font=%s size=%.1f '%s' -> '%s'",
+            i, e.page, e.rect.x0, e.rect.y0, e.rect.x1, e.rect.y1,
+            e.font, e.font_size, e.original_text, e.new_text,
+        )
+
     doc = fitz.open(pdf_path(doc_id))
+
+    # Remove digital signatures so edits can be applied.
+    # Signatures lock the PDF content; we need to strip them first.
+    _remove_signatures(doc)
 
     doc_fonts_dir = FONTS_DIR / doc_id
 
@@ -165,15 +237,38 @@ def apply_edits(doc_id: str, edits: list[EditOperation]) -> bytes:
         page = doc[edit.page]
         r = fitz.Rect(edit.rect.x0, edit.rect.y0, edit.rect.x1, edit.rect.y1)
 
-        # 1) Cover original text with white rectangle
+        # If a form field (widget) overlaps, update it directly
+        widgets = page.widgets()
+        if widgets:
+            widget_updated = False
+            for widget in widgets:
+                try:
+                    if widget.rect.intersects(r):
+                        log.info("  -> Widget found! field_name=%s old_value='%s' -> '%s'",
+                                 widget.field_name, widget.field_value, edit.new_text)
+                        widget.field_value = edit.new_text
+                        widget.update()
+                        widget_updated = True
+                except Exception as exc:
+                    log.warning("  -> Widget update failed: %s", exc)
+                    continue
+            if widget_updated:
+                continue
+
+        # 1) Cover original text with white rectangle (with extra padding)
+        log.info("  -> Overlay mode: drawing white rect + text")
+        pad = 2  # small padding to ensure full coverage
+        cover_rect = fitz.Rect(
+            r.x0 - pad, r.y0 - pad,
+            r.x1 + pad, r.y1 + pad,
+        )
         shape = page.new_shape()
-        shape.draw_rect(r)
+        shape.draw_rect(cover_rect)
         shape.finish(color=None, fill=(1, 1, 1))  # white fill
         shape.commit()
 
         # 2) Determine font to use
         font_name = edit.font
-        fitz_fontname = "helv"  # fallback
         fontfile = None
 
         # Try to use the extracted font
@@ -181,39 +276,43 @@ def apply_edits(doc_id: str, edits: list[EditOperation]) -> bytes:
             extracted = get_font_path(doc_id, font_name)
             if extracted and extracted.exists():
                 fontfile = str(extracted)
-                fitz_fontname = None  # will use fontfile instead
 
-        # 3) Insert new text
+        # 3) Insert new text using insert_text (absolute position, no padding)
+        #    insert_text places text at the baseline point.
+        #    baseline ≈ y1 - descent. For most fonts descent ≈ 20-25% of size.
         text_color = _hex_to_rgb(edit.color)
+        baseline_y = r.y1 - (edit.font_size * 0.2)
+        insert_point = fitz.Point(r.x0, baseline_y)
 
         try:
             if fontfile:
-                page.insert_textbox(
-                    r,
+                log.info("  -> Using extracted font file: %s", fontfile)
+                page.insert_text(
+                    insert_point,
                     edit.new_text,
                     fontfile=fontfile,
                     fontsize=edit.font_size,
                     color=text_color,
-                    align=fitz.TEXT_ALIGN_LEFT,
                 )
             else:
-                page.insert_textbox(
-                    r,
+                log.info("  -> Using builtin font: helv")
+                page.insert_text(
+                    insert_point,
                     edit.new_text,
-                    fontname=fitz_fontname,
+                    fontname="helv",
                     fontsize=edit.font_size,
                     color=text_color,
-                    align=fitz.TEXT_ALIGN_LEFT,
                 )
-        except Exception:
+            log.info("  -> insert_text OK at (%.1f, %.1f)", r.x0, baseline_y)
+        except Exception as exc:
+            log.warning("  -> insert_text with font failed (%s), using helv fallback", exc)
             # Fallback: use Helvetica
-            page.insert_textbox(
-                r,
+            page.insert_text(
+                insert_point,
                 edit.new_text,
                 fontname="helv",
                 fontsize=edit.font_size,
                 color=text_color,
-                align=fitz.TEXT_ALIGN_LEFT,
             )
 
     result = doc.tobytes(deflate=True, garbage=4)

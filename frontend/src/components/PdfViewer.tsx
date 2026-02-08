@@ -232,6 +232,10 @@ const PdfViewer: React.FC<Props> = ({
             const isEditing = editingSpan === span;
             const isEdited = !!edit;
 
+            const spanFontFamily = loadedFonts.has(span.font)
+              ? `"${span.font}", sans-serif`
+              : "sans-serif";
+
             return (
               <div
                 key={`${span.rect.x0}-${span.rect.y0}-${i}`}
@@ -243,6 +247,25 @@ const PdfViewer: React.FC<Props> = ({
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleSpanClick(span); }}
                 title={isEdited ? `"${edit!.original_text}" → "${edit!.new_text}"` : span.text}
               >
+                {/* Visual preview of edited text */}
+                {isEdited && !isEditing && (
+                  <div
+                    className="absolute inset-0 flex items-center bg-white"
+                    style={{
+                      fontFamily: spanFontFamily,
+                      fontSize: `${span.size * zoom}px`,
+                      lineHeight: 1,
+                      color: span.color,
+                      fontWeight: (span.flags & 0x10) ? "bold" : "normal",
+                      fontStyle: (span.flags & 0x02) ? "italic" : "normal",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      pointerEvents: "none",
+                    }}
+                  >
+                    {edit!.new_text}
+                  </div>
+                )}
                 {/* Inline editor */}
                 {isEditing && (
                   <div

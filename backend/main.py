@@ -14,7 +14,8 @@ from models import ExportRequest, PageText
 # ── App ──────────────────────────────────────────────────────────────────────
 app = FastAPI(title="PDF Editor API", version="0.1.0")
 
-ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
+ALLOWED_ORIGINS = os.getenv(
+    "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,13 +44,22 @@ async def upload_document(file: UploadFile = File(...)):
     if len(content) > 50 * 1024 * 1024:  # 50 MB limit
         raise HTTPException(413, "File too large (max 50 MB).")
 
-    doc_id = pdf_service.save_upload(content)
+    try:
+        doc_id = pdf_service.save_upload(content)
 
-    # Extract fonts right after upload (async-ready in the future)
-    pdf_service.extract_fonts(doc_id)
+        # Extract fonts right after upload (async-ready in the future)
+        try:
+            pdf_service.extract_fonts(doc_id)
+        except Exception:
+            # font extraction can fail on some PDFs; continue with fallback fonts
+            pass
 
-    page_count = pdf_service.get_page_count(doc_id)
-    pages = pdf_service.get_page_dimensions(doc_id)
+        page_count = pdf_service.get_page_count(doc_id)
+        pages = pdf_service.get_page_dimensions(doc_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(500, f"Upload failed: {exc}")
 
     return {
         "id": doc_id,
@@ -124,5 +134,6 @@ def export_document(doc_id: str, body: ExportRequest):
     return Response(
         content=result_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="edited_{doc_id}.pdf"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="edited_{doc_id}.pdf"'},
     )
