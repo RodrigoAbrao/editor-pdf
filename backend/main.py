@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import os
 
+from dotenv import load_dotenv
+load_dotenv()  # Load .env from backend/ or project root
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 
 import pdf_service
+import quality_check
 from models import ExportRequest, PageText
 
 # ── App ──────────────────────────────────────────────────────────────────────
@@ -131,9 +135,68 @@ def export_document(doc_id: str, body: ExportRequest):
     except Exception as exc:
         raise HTTPException(500, f"Export failed: {exc}")
 
+    # Run quality validation if OpenAI key is configured
+    try:
+        edits_dicts = [e.model_dump() for e in body.edits]
+        reports = quality_check.validate_edit_quality(
+            str(p), result_bytes, edits_dicts
+        )
+
+        # Auto-repair if issues found
+        if reports and any(not r.passed for r in reports):
+            repaired = quality_check.auto_repair_edits(
+                str(p), result_bytes, edits_dicts, reports
+            )
+            if repaired:
+                result_bytes = repaired
+    except Exception as exc:
+        # Quality check is best-effort; don't block export
+        import logging
+        logging.getLogger(__name__).warning(
+            "Quality check skipped: %s", exc
+        )
+
     return Response(
         content=result_bytes,
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="edited_{doc_id}.pdf"'},
     )
+
+
+# ── Quality check (standalone) ───────────────────────────────────────────────
+
+@app.post("/api/documents/{doc_id}/quality-check")
+def check_quality(doc_id: str, body: ExportRequest):
+    """Run quality validation without downloading — returns report."""
+    p = pdf_service.pdf_path(doc_id)
+    if not p.exists():
+        raise HTTPException(404, "Document not found.")
+
+    try:
+        result_bytes = pdf_service.apply_edits(doc_id, body.edits)
+        edits_dicts = [e.model_dump() for e in body.edits]
+        reports = quality_check.validate_edit_quality(
+            str(p), result_bytes, edits_dicts
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Quality check failed: {exc}")
+
+    return {
+        "reports": [
+            {
+                "edit_index": r.edit_index,
+                "page": r.page,
+                "passed": r.passed,
+                "issues": [
+                    {
+                        "severity": iss.severity,
+                        "description": iss.description,
+                        "suggestion": iss.suggestion,
+                    }
+                    for iss in r.issues
+                ],
+            }
+            for r in reports
+        ]
+    }

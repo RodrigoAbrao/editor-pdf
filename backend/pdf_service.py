@@ -316,12 +316,14 @@ def apply_edits(doc_id: str, edits: list[EditOperation]) -> bytes:
             if widget_updated:
                 continue
 
-        # 1) Cover original text with white rectangle (with extra padding)
+        # 1) Cover original text with a precise white rectangle.
+        #    Use NO horizontal padding so we don't eat table borders.
+        #    Vertically shrink by a tiny amount to preserve horizontal rules.
         log.info("  -> Overlay mode: drawing white rect + text")
-        pad = 2  # small padding to ensure full coverage
+        v_shrink = 0.3
         cover_rect = fitz.Rect(
-            r.x0 - pad, r.y0 - pad,
-            r.x1 + pad, r.y1 + pad,
+            r.x0, r.y0 + v_shrink,
+            r.x1, r.y1 - v_shrink,
         )
         shape = page.new_shape()
         shape.draw_rect(cover_rect)

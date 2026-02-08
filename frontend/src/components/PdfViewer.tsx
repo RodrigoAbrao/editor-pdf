@@ -101,10 +101,17 @@ const PdfViewer: React.FC<Props> = ({
       const canvas = canvasRef.current!;
       const ctx = canvas.getContext("2d")!;
 
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
+      // Use devicePixelRatio for crisp rendering on high-DPI displays
+      const dpr = window.devicePixelRatio || 1;
+      const scaledViewport = page.getViewport({ scale: zoom * dpr });
+
+      canvas.width = scaledViewport.width;
+      canvas.height = scaledViewport.height;
       canvas.style.width = `${viewport.width}px`;
       canvas.style.height = `${viewport.height}px`;
+
+      // Scale context to match device pixel ratio
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       await page.render({ canvasContext: ctx, viewport }).promise;
 
