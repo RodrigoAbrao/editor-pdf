@@ -163,6 +163,8 @@ const PdfViewer: React.FC<Props> = ({
         font: editingSpan.font,
         font_size: editingSpan.size,
         color: editingSpan.color,
+        flags: editingSpan.flags,
+        origin_y: editingSpan.origin_y,
       });
     }
     setEditingSpan(null);

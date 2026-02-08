@@ -10,14 +10,14 @@ pt = pdf_service.extract_page_text(doc_id, 0)
 print(f'Page dimensions: {pt.width} x {pt.height}')
 print(f'Num spans: {len(pt.spans)}')
 for i, s in enumerate(pt.spans[:20]):
-    print(f'  span[{i}]: text="{s.text}" font={s.font} size={s.size} rect=({s.rect.x0:.1f},{s.rect.y0:.1f},{s.rect.x1:.1f},{s.rect.y1:.1f})')
+    print(f'  span[{i}]: text="{s.text}" font={s.font} size={s.size} flags={s.flags} origin_y={s.origin_y:.1f} rect=({s.rect.x0:.1f},{s.rect.y0:.1f},{s.rect.x1:.1f},{s.rect.y1:.1f})')
 
 # 2) Encontrar o span "36500000" (o CEP que está na screenshot)
 cep_span = None
 for s in pt.spans:
     if '36500000' in s.text or '365' in s.text:
         cep_span = s
-        print(f'\n*** Found target span: text="{s.text}" font={s.font} size={s.size}')
+        print(f'\n*** Found target span: text="{s.text}" font={s.font} size={s.size} flags={s.flags} origin_y={s.origin_y:.1f}')
         print(f'    rect=({s.rect.x0:.1f},{s.rect.y0:.1f},{s.rect.x1:.1f},{s.rect.y1:.1f})')
 
 # 3) Testar o export
@@ -30,6 +30,8 @@ if cep_span:
         font=cep_span.font,
         font_size=cep_span.size,
         color=cep_span.color,
+        flags=cep_span.flags,
+        origin_y=cep_span.origin_y,
     )
     result = pdf_service.apply_edits(doc_id, [edit])
     out_path = r'c:\Users\PHOENIX\editor-pdf\backend\data\test_output.pdf'

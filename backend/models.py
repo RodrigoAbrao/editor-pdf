@@ -19,6 +19,7 @@ class TextSpan(BaseModel):
     color: str  # hex "#RRGGBB"
     rect: Rect
     flags: int = 0  # bold / italic bitflags from PyMuPDF
+    origin_y: float = 0.0  # baseline Y position
 
 
 class PageText(BaseModel):
@@ -55,6 +56,8 @@ class EditOperation(BaseModel):
     font: str = "helv"
     font_size: float = 11.0
     color: str = "#000000"
+    flags: int = 0  # bold/italic bitflags
+    origin_y: float = 0.0  # baseline Y
 
 
 class ExportRequest(BaseModel):

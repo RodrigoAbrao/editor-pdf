@@ -14,6 +14,7 @@ export interface TextSpan {
   color: string;
   rect: Rect;
   flags: number;
+  origin_y: number;
 }
 
 export interface PageText {
@@ -46,4 +47,6 @@ export interface EditOperation {
   font: string;
   font_size: number;
   color: string;
+  flags: number;
+  origin_y: number;
 }

@@ -47,6 +47,64 @@ def _clean_font_name(raw: str) -> str:
     return re.sub(r"^[A-Z]{6}\+", "", raw)
 
 
+# Map common PDF font names to fitz builtin fontnames.
+# fitz builtins: helv, heit (italic), hebo (bold), hebi (bold-italic),
+#   cour, coit, cobo, cobi, tiro, tiit, tibo, tibi, symb, zadb
+_BUILTIN_FONT_MAP: dict[str, str] = {
+    # Helvetica family
+    "helvetica": "helv",
+    "helvetica-bold": "hebo",
+    "helvetica-oblique": "heit",
+    "helvetica-boldoblique": "hebi",
+    # Arial mapped to Helvetica equivalents
+    "arial": "helv",
+    "arialmt": "helv",
+    "arial-boldmt": "hebo",
+    "arial-bold": "hebo",
+    "arial-italicmt": "heit",
+    "arial-bolditalicmt": "hebi",
+    # Times family
+    "times-roman": "tiro",
+    "timesnewromanpsmt": "tiro",
+    "times-bold": "tibo",
+    "timesnewromanps-boldmt": "tibo",
+    "times-italic": "tiit",
+    "times-bolditalic": "tibi",
+    # Courier family
+    "courier": "cour",
+    "courier-bold": "cobo",
+    "courier-oblique": "coit",
+    "courier-boldoblique": "cobi",
+    "couriernewpsmt": "cour",
+    "couriernewps-boldmt": "cobo",
+    # Symbol / ZapfDingbats
+    "symbol": "symb",
+    "zapfdingbats": "zadb",
+}
+
+
+def _resolve_builtin_font(font_name: str, flags: int = 0) -> str:
+    """Resolve a PDF font name to a fitz builtin fontname.
+
+    Uses the name first, then falls back to flags (bold/italic bits).
+    """
+    key = font_name.lower().replace(" ", "")
+    if key in _BUILTIN_FONT_MAP:
+        return _BUILTIN_FONT_MAP[key]
+
+    # Heuristic: check if name contains bold/italic hints
+    is_bold = "bold" in key or (flags & 0x10)
+    is_italic = "italic" in key or "oblique" in key or (flags & 0x02)
+
+    if is_bold and is_italic:
+        return "hebi"
+    if is_bold:
+        return "hebo"
+    if is_italic:
+        return "heit"
+    return "helv"
+
+
 # ── save upload ──────────────────────────────────────────────────────────────
 
 def save_upload(file_bytes: bytes) -> str:
@@ -152,6 +210,8 @@ def extract_page_text(doc_id: str, page_num: int) -> PageText:
                 if not text:
                     continue
                 bbox = span["bbox"]
+                # origin is the baseline point (x, y)
+                origin = span.get("origin", (bbox[0], bbox[3]))
                 spans.append(
                     TextSpan(
                         text=text,
@@ -161,6 +221,7 @@ def extract_page_text(doc_id: str, page_num: int) -> PageText:
                         rect=Rect(x0=bbox[0], y0=bbox[1],
                                   x1=bbox[2], y1=bbox[3]),
                         flags=span.get("flags", 0),
+                        origin_y=origin[1],
                     )
                 )
     return PageText(page=page_num, width=rect.width, height=rect.height, spans=spans)
@@ -278,11 +339,18 @@ def apply_edits(doc_id: str, edits: list[EditOperation]) -> bytes:
                 fontfile = str(extracted)
 
         # 3) Insert new text using insert_text (absolute position, no padding)
-        #    insert_text places text at the baseline point.
-        #    baseline ≈ y1 - descent. For most fonts descent ≈ 20-25% of size.
+        #    Use the original baseline Y from the span if available.
         text_color = _hex_to_rgb(edit.color)
-        baseline_y = r.y1 - (edit.font_size * 0.2)
+
+        if edit.origin_y and edit.origin_y > 0:
+            baseline_y = edit.origin_y
+        else:
+            baseline_y = r.y1 - (edit.font_size * 0.2)
+
         insert_point = fitz.Point(r.x0, baseline_y)
+
+        # Resolve builtin font name (bold, italic, etc.)
+        builtin_name = _resolve_builtin_font(font_name or "", edit.flags)
 
         try:
             if fontfile:
@@ -295,11 +363,12 @@ def apply_edits(doc_id: str, edits: list[EditOperation]) -> bytes:
                     color=text_color,
                 )
             else:
-                log.info("  -> Using builtin font: helv")
+                log.info("  -> Using builtin font: %s (from '%s', flags=%d)",
+                         builtin_name, font_name, edit.flags)
                 page.insert_text(
                     insert_point,
                     edit.new_text,
-                    fontname="helv",
+                    fontname=builtin_name,
                     fontsize=edit.font_size,
                     color=text_color,
                 )
