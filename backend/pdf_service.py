@@ -1,6 +1,7 @@
 """Core PDF processing: text extraction, font extraction, overlay editing."""
 
 from __future__ import annotations
+from models import EditOperation, PageText, Rect, TextSpan
 
 import hashlib
 import logging
@@ -13,7 +14,6 @@ import fitz  # PyMuPDF
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
-from models import EditOperation, PageText, Rect, TextSpan
 
 # ── directories ──────────────────────────────────────────────────────────────
 DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
@@ -246,7 +246,8 @@ def _remove_signatures(doc: fitz.Document) -> None:
                         widget_rect = widget.rect
                         page.delete_widget(widget)
                         removed += 1
-                        log.info("  Removed signature widget at %s", widget_rect)
+                        log.info(
+                            "  Removed signature widget at %s", widget_rect)
                 except Exception as exc:
                     log.warning("  Failed to remove signature widget: %s", exc)
 
@@ -376,7 +377,8 @@ def apply_edits(doc_id: str, edits: list[EditOperation]) -> bytes:
                 )
             log.info("  -> insert_text OK at (%.1f, %.1f)", r.x0, baseline_y)
         except Exception as exc:
-            log.warning("  -> insert_text with font failed (%s), using helv fallback", exc)
+            log.warning(
+                "  -> insert_text with font failed (%s), using helv fallback", exc)
             # Fallback: use Helvetica
             page.insert_text(
                 insert_point,

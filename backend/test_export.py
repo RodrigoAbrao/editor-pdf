@@ -1,7 +1,7 @@
+from models import EditOperation, Rect
+import pdf_service
 import sys
 sys.path.insert(0, r'c:\Users\PHOENIX\editor-pdf\backend')
-import pdf_service
-from models import EditOperation, Rect
 
 doc_id = 'a79ed556b1a51394'
 
@@ -17,14 +17,17 @@ cep_span = None
 for s in pt.spans:
     if '36500000' in s.text or '365' in s.text:
         cep_span = s
-        print(f'\n*** Found target span: text="{s.text}" font={s.font} size={s.size} flags={s.flags} origin_y={s.origin_y:.1f}')
-        print(f'    rect=({s.rect.x0:.1f},{s.rect.y0:.1f},{s.rect.x1:.1f},{s.rect.y1:.1f})')
+        print(
+            f'\n*** Found target span: text="{s.text}" font={s.font} size={s.size} flags={s.flags} origin_y={s.origin_y:.1f}')
+        print(
+            f'    rect=({s.rect.x0:.1f},{s.rect.y0:.1f},{s.rect.x1:.1f},{s.rect.y1:.1f})')
 
 # 3) Testar o export
 if cep_span:
     edit = EditOperation(
         page=0,
-        rect=Rect(x0=cep_span.rect.x0, y0=cep_span.rect.y0, x1=cep_span.rect.x1, y1=cep_span.rect.y1),
+        rect=Rect(x0=cep_span.rect.x0, y0=cep_span.rect.y0,
+                  x1=cep_span.rect.x1, y1=cep_span.rect.y1),
         original_text=cep_span.text,
         new_text='36500001',
         font=cep_span.font,

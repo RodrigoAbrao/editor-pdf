@@ -1,19 +1,18 @@
 """FastAPI application – PDF Editor Backend."""
 
 from __future__ import annotations
+from models import ExportRequest, PageText
+import quality_check
+import pdf_service
+from fastapi.responses import FileResponse, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, File, HTTPException, UploadFile
 
 import os
 
 from dotenv import load_dotenv
 load_dotenv()  # Load .env from backend/ or project root
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
-
-import pdf_service
-import quality_check
-from models import ExportRequest, PageText
 
 # ── App ──────────────────────────────────────────────────────────────────────
 app = FastAPI(title="PDF Editor API", version="0.1.0")
