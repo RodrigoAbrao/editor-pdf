@@ -26,6 +26,9 @@ build/
 .vite/
 .next/
 
+# Encore
+.encore/
+
 # OS / Editor
 .DS_Store
 Thumbs.db
