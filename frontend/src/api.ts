@@ -2,10 +2,10 @@
 
 import type { DocumentInfo, EditOperation, PageText } from "./types";
 
-// In production we prefer same-origin requests ("/api/..."), so Vercel rewrites
-// can proxy to the backend without CORS headaches.
-// In dev, allow overriding with VITE_API_URL (otherwise Vite proxy / same-origin).
-const BASE = import.meta.env.DEV ? (import.meta.env.VITE_API_URL ?? "") : "";
+// Base URL for the backend API.
+// - Prod: set `VITE_API_URL` on Vercel (e.g. https://your-backend.onrender.com)
+// - Dev: leave empty to use Vite proxy / same-origin, or set VITE_API_URL to override.
+const BASE = import.meta.env.VITE_API_URL ?? "";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, init);
