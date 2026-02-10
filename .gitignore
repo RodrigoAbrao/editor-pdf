@@ -25,7 +25,6 @@ dist/
 build/
 .vite/
 .next/
-*.tsbuildinfo
 
 # Encore
 .encore/

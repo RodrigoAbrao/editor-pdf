@@ -29,17 +29,21 @@ class PageText(BaseModel):
     spans: list[TextSpan]
 
 
+class DocumentInfo(BaseModel):
+    id: str
+    filename: str
+    page_count: int
+    pages: list[PageDimension] | None = None
+
+
 class PageDimension(BaseModel):
     page: int
     width: float
     height: float
 
 
-class DocumentInfo(BaseModel):
-    id: str
-    filename: str
-    page_count: int
-    pages: list[PageDimension] | None = None
+# ── rebuild forward refs ──
+DocumentInfo.model_rebuild()
 
 
 class EditOperation(BaseModel):
