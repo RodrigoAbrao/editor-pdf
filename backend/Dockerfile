@@ -10,7 +10,6 @@ COPY . .
 RUN mkdir -p /app/data/uploads /app/data/fonts
 
 ENV DATA_DIR=/app/data
-ENV CORS_ORIGINS=*
 
 EXPOSE 8000
 

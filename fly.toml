@@ -9,8 +9,9 @@ primary_region = 'gru'
 [build]
   dockerfile = "Dockerfile"
 
+# IMPORTANT: Set secrets via CLI, not here!
+# flyctl secrets set OPENAI_API_KEY=sk-your-key
 [env]
-  OPENAI_API_KEY = "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"
   CORS_ORIGINS = "https://editor-pdf-enganonimo.vercel.app"
   DATA_DIR = "/app/data"
 
