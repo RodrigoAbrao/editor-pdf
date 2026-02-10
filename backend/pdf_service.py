@@ -12,7 +12,7 @@ from pathlib import Path
 import fitz  # PyMuPDF
 
 log = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 
 
 # ── directories ──────────────────────────────────────────────────────────────
